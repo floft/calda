@@ -1,0 +1,38 @@
+DATASET:
+  NUM_CLASSES: {{num_classes}}
+  DATAROOT: '../calda/datasets/as_images/'
+  SOURCE_NAME: {{sources_train}}
+  TARGET_NAME: "{{target_train}}"
+  IN_CHANNELS: {{in_channels}}
+
+MODEL:
+  FEATURE_EXTRACTOR: 'fcn'
+
+TRAIN:
+  SOURCE_BATCH_SIZE: 30
+  SOURCE_CLASS_BATCH_SIZE: 10
+  TARGET_CLASS_BATCH_SIZE: 10
+  NUM_SELECTED_CLASSES: {{num_classes}}
+  LR_SCHEDULE: inv
+  UPDATE_EPOCH_PERCENTAGE: 0.2
+
+CLUSTERING:
+  TARGET_BATCH_SIZE: 600
+  SOURCE_BATCH_SIZE: 600
+  BUDGET: 1000
+  FILTERING_THRESHOLD: 1.0
+
+INV:
+  ALPHA: 0.0005
+  BETA: 2.25
+
+CDD:
+  LOSS_WEIGHT: 0.3
+
+TEST:
+  BATCH_SIZE: 100
+  DOMAIN: "{{target_test}}"
+
+EVAL_METRIC: "mean_accu"
+SAVE_DIR: "{{save_dir}}"
+NUM_WORKERS: 1

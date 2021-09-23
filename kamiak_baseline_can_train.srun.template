@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH --job-name=baseline_can_train
+#SBATCH --output=slurm_logs/baseline_can_train_%A_%a.out
+#SBATCH --error=slurm_logs/baseline_can_train_%A_%a.err
+#SBATCH --cpus-per-task={{cpus}}
+#SBATCH --gres=gpu:{{gpus}}
+#SBATCH --partition={{partitions}}
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=30G
+#SBATCH --array=0-{{max_array}}
+
+. kamiak_config.sh
+. kamiak_tensorflow_{{cpu_or_gpu}}.sh
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# Errors
+handle_terminate() { echo "Exiting"; exit 1; }
+handle_error() { echo "Error occurred -- exiting"; exit 1; }
+trap "handle_terminate" SIGTERM SIGINT
+
+names=({{names}})
+savedirs=({{savedirs}})
+options=({{options}})
+index=$SLURM_ARRAY_TASK_ID
+name="${names[$index]}"
+savedir="${savedirs[$index]}"
+option="${options[$index]}"
+
+echo "$name #$SLURM_ARRAY_TASK_ID"
+echo "Savedir: $savedir"
+echo "Options: $option"
+cd ../Contrastive-Adaptation-Network-for-Unsupervised-Domain-Adaptation
+
+mkdir -p "${savedir}/${name}_train2val"
+
+./experiments/scripts/train.sh \
+    "./experiments/config/${name}/CAN/${name}_train_train2val_cfg.yaml" \
+    0 CAN "${name}_train2val" $option || handle_error

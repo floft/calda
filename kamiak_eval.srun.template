@@ -1,0 +1,86 @@
+#!/bin/bash
+#SBATCH --job-name=eval
+#SBATCH --output=slurm_logs/eval_%A_%a.out
+#SBATCH --error=slurm_logs/eval_%A_%a.err
+#SBATCH --cpus-per-task={{cpus}}
+#SBATCH --gres=gpu:{{gpus}}
+#SBATCH --partition={{partitions}}
+#SBATCH --time=0-02:00:00
+#SBATCH --mem=10G
+#SBATCH --array=0-{{max_array}}
+
+. kamiak_config.sh
+. kamiak_tensorflow_{{cpu_or_gpu}}.sh
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# Errors
+handle_terminate() { echo "Exiting"; exit 1; }
+handle_error() { echo "Error occurred -- exiting"; exit 1; }
+trap "handle_terminate" SIGTERM SIGINT
+
+# Get suffix, i.e. files stored in kamiak-{models,logs}-suffix
+suffix=$1; shift
+[[ -z $suffix ]] && { echo "no suffix specified"; handle_error; }
+
+methods=({{methods}})
+variants=({{variants}})
+uids=({{uids}})
+datasets=({{datasets}})
+sources=({{sources}})
+targets=({{targets}})
+additional_suffixes=({{additional_suffixes}})  # for tuning
+
+# Check lengths are all the same
+[[ ${#methods[@]} == ${#variants[@]} ]] || { echo "variants wrong length"; handle_error; }
+[[ ${#methods[@]} == ${#uids[@]} ]] || { echo "uids wrong length"; handle_error; }
+[[ ${#methods[@]} == ${#datasets[@]} ]] || { echo "datasets wrong length"; handle_error; }
+[[ ${#methods[@]} == ${#sources[@]} ]] || { echo "sources wrong length"; handle_error; }
+[[ ${#methods[@]} == ${#targets[@]} ]] || { echo "targets wrong length"; handle_error; }
+[[ ${#methods[@]} == ${#additional_suffixes[@]} ]] || { echo "additional_suffixes wrong length"; handle_error; }
+
+# Make sure we're using the right number -- no longer check here since we
+# check when we create the scripts in experiments_msda.py, thus allowing us to
+# use --array=0-5 etc. for instance
+# correct_min=0
+# correct_max=$(( ${#methods[@]} - 1 ))
+# [[ $SLURM_ARRAY_TASK_MIN == $correct_min ]] || { echo "array min should be $correct_min"; handle_error; }
+# [[ $SLURM_ARRAY_TASK_MAX == $correct_max ]] || { echo "array max should be $correct_max"; handle_error; }
+
+# Get this run of the array's values
+index=$SLURM_ARRAY_TASK_ID
+method="${methods[$index]}"
+variant="${variants[$index]}"
+uid="${uids[$index]}"
+dataset="${datasets[$index]}"
+source="${sources[$index]}"
+target="${targets[$index]}"
+additional_suffix="${additional_suffixes[$index]}"
+
+# For tuning, we append another suffix
+suffix="$suffix$additional_suffix"
+
+# Output name uses method from above not the "none" for "upper"
+out="{{results_dir}}/results_${suffix}_$variant-$dataset-$uid-$method.yaml"
+
+# Upper bound is actually "none" but without a target domain and with other args
+if [[ $method == "upper" ]]; then
+    method="none"
+    source="$target"
+    target=""
+fi
+
+echo "$suffix #$SLURM_ARRAY_TASK_ID"
+echo "Method: $method"
+echo "Selection: $variant"
+echo "Other args: $@"
+echo "UID: $uid"
+echo "$dataset $source --> $target"
+
+cd "$remotedir"
+mkdir -p "{{results_dir}}"
+python3 -B main_eval.py \
+    --logdir="$logFolder-$suffix" --modeldir="$modelFolder-$suffix" \
+    --jobs=1 --gpus=1 --gpumem=0 \
+    --match="$dataset-$uid-$method-[0-9]*" \
+    --selection="$variant" --output_file="$out" \
+    {{additional_args}} "$@" || handle_error

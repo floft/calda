@@ -1,0 +1,17 @@
+DATASET:
+  NUM_CLASSES: {{num_classes}}
+  DATAROOT: '../calda/datasets/as_images/'
+  IN_CHANNELS: {{in_channels}}
+
+MODEL:
+  FEATURE_EXTRACTOR: 'fcn'
+
+TEST:
+  BATCH_SIZE: 100
+  DOMAIN: "{{target_test}}"
+
+EVAL_METRIC: "mean_accu"
+SAVE_DIR: "{{save_dir}}"
+NUM_WORKERS: 1
+# set the path to the trained model here
+WEIGHTS: "{{save_dir}}/${experiment_name}/ckpt_*.weights"

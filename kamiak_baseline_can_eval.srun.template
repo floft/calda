@@ -1,0 +1,90 @@
+#!/bin/bash
+#SBATCH --job-name=baseline_can_eval
+#SBATCH --output=slurm_logs/baseline_can_eval_%A_%a.out
+#SBATCH --error=slurm_logs/baseline_can_eval_%A_%a.err
+#SBATCH --cpus-per-task={{cpus}}
+#SBATCH --gres=gpu:1
+#SBATCH --partition={{partitions}}
+#SBATCH --time=0-02:00:00
+#SBATCH --mem=10G
+#SBATCH --array=0-{{max_array}}
+
+# Note: always using 1 GPU since for some reason it errors without GPU
+
+. kamiak_config.sh
+. kamiak_tensorflow_{{cpu_or_gpu}}.sh
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+# Errors
+handle_terminate() { echo "Exiting"; exit 1; }
+handle_error() { echo "Error occurred -- exiting"; exit 1; }
+trap "handle_terminate" SIGTERM SIGINT
+
+names=({{names}})
+savedirs=({{savedirs}})
+output_filenames=({{output_filenames}})
+datasets=({{datasets}})
+sources=({{sources}})
+targets=({{targets}})
+uids=({{uids}})
+index=$SLURM_ARRAY_TASK_ID
+name="${names[$index]}"
+dataset="${datasets[$index]}"
+source="${sources[$index]}"
+target="${targets[$index]}"
+uid="${uids[$index]}"
+savedir="${savedirs[$index]}"
+output_filename="${output_filenames[$index]}"
+
+mkdir -p results results_baselines_can
+out="$(pwd)/results_baselines_can/results_${name}.txt"
+yaml_out="$(pwd)/{{out_dir}}/${output_filename}.yaml"
+
+echo "$name #$SLURM_ARRAY_TASK_ID"
+cd ../Contrastive-Adaptation-Network-for-Unsupervised-Domain-Adaptation
+
+mkdir -p "${savedir}/${name}_test"
+
+(
+    set -o pipefail
+    ./experiments/scripts/test_best_target.sh \
+        "./experiments/config/${name}/${name}_test_val_cfg.yaml" 0 True \
+        "${name}_train2val" "${name}_test" "$savedir" | tee "$out"
+) || handle_error
+
+# Create simple YAML file with the information
+accuracy=$(grep "Test mean_accu:" "$out" | tail -n 1 | sed 's/Test mean_accu: //g')
+# divide by 100
+accuracy=$(awk -v "m=$accuracy" 'BEGIN { print m/100 }')
+
+cat <<EOF > "$yaml_out"
+- config:
+    method: can
+    dataset: ${dataset}
+    sources: ${source}
+    target: '${target}'
+    uid: '${uid}'
+    shared_modalities: '0'
+    similarity_weight: 0.0
+    source_feature_subset: ''
+    source_modality_subset: '0'
+    target_feature_subset: ''
+    target_modality_subset: '0'
+  logdir: ''
+  max_accuracy: 0
+  max_accuracy_step: 0
+  modeldir: ''
+  results:
+    accuracy_domain/source/training: -1
+    accuracy_domain/source/validation: -1
+    accuracy_domain/target/training: -1
+    accuracy_domain/target/validation: -1
+    accuracy_task/source/training: -1
+    accuracy_task/source/validation: -1
+    accuracy_task/target/training: -1
+    accuracy_task/target/validation: ${accuracy}
+    auc_task/source/training: -1
+    auc_task/source/validation: -1
+    auc_task/target/training: -1
+    auc_task/target/validation: -1
+EOF

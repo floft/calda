@@ -1,0 +1,3 @@
+[submodule "datasets/MyoArmbandDataset"]
+	path = datasets/MyoArmbandDataset
+	url = https://github.com/UlysseCoteAllard/MyoArmbandDataset.git
